@@ -2,3 +2,6 @@
 output
 input
 DeepLearning/input
+DeepLearning/output
+DeepLearning/model/
+input copy

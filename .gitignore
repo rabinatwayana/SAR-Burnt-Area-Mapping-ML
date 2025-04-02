@@ -7,3 +7,5 @@ DeepLearning/model/
 input copy
 MachineLearning/input/
 MachineLearning/output/
+DL_LSTM/output
+DL_LSTM/__pycache__

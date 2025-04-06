@@ -11,3 +11,5 @@ MachineLearning/test/
 DL_LSTM/output
 DL_LSTM/__pycache__
 sample/
+MachineLearningBenchmark/
+MachineLearning/intermediate/

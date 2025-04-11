@@ -8,8 +8,9 @@ input copy
 MachineLearning/input/
 MachineLearning/output/
 MachineLearning/test/
-DL_LSTM/output
-DL_LSTM/__pycache__
+LSTM/output
+LSTM/__pycache__
 sample/
 MachineLearningBenchmark/
 MachineLearning/intermediate/
+__pycache__

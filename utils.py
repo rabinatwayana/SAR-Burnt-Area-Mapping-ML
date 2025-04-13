@@ -10,6 +10,7 @@ from matplotlib.patches import Patch
 import joblib
 import pandas as pd
 from scipy.ndimage import uniform_filter
+from sklearn.decomposition import PCA
 
 
 
@@ -576,5 +577,89 @@ def predict(model, image_path, output_file_path,output_image_path,title ):
 
 
 
+def glcm_average(input_path, output_path):
 
+    with rasterio.open(input_path) as src:
+        meta = src.meta.copy()
+        meta.update(count=20)  # output will have 20 bands
+
+        # Read all 60 bands
+        full_stack = src.read()  # shape: (60, height, width)
+
+        # Prepare the output stack
+        averaged_stack = np.zeros((20, src.height, src.width), dtype=full_stack.dtype)
+
+        for i in range(20):
+            band1 = full_stack[i, :, :]
+            band2 = full_stack[i + 20, :, :]
+            band3 = full_stack[i + 40, :, :]
+
+            averaged_stack[i] = (band1 + band2 + band3) / 3
+
+    # Write the output raster
+    with rasterio.open(output_path, 'w', **meta) as dst:
+        dst.write(averaged_stack)
+
+    print(f"Averaged raster saved as: {output_path}")
+
+
+def compute_pca(input_image, output_path):
+
+    with rasterio.open(input_image) as src:
+        bands = src.read()  # Shape will be (bands, height, width)
+        meta=src.meta.copy()
+
+    pixels = bands.reshape(bands.shape[0], -1).T  # Transpose to have shape (num_pixels, num_bands)
+    pixels = np.nan_to_num(pixels, nan=0.0) 
+
+    pca = PCA(n_components=3)  # Get the first 5 principal components
+    principal_components = pca.fit_transform(pixels)  # Shape will be (num_pixels, 5)
+
+    num_components = pca.n_components_
+    print(f'Number of principal components selected: {num_components}')
+
+    principal_components_image = principal_components.T.reshape(num_components, bands.shape[1], bands.shape[2])
+
+    plt.figure(figsize=(15, 15))
+    for i in range(num_components):
+        plt.subplot(1, num_components, i+1)
+        plt.imshow(principal_components_image[i], cmap='gray')
+        plt.title(f'Principal Component {i+1}')
+    plt.show()
+
+    # Step 6: Save the PCA results to a new TIFF file
+    meta.update({'count':num_components})
+
+    with rasterio.open(output_path, 'w', **meta) as dst:
+        # Write each principal component as a separate band
+        for i in range(num_components):
+            dst.write(principal_components_image[i], i+1)
+
+def compute_dglcm(pre_image_path, post_image_path,output_path):
+    with rasterio.open(pre_image_path) as pre_src, rasterio.open(post_image_path) as post_src:
+        pre = pre_src.read()   # shape: (bands, height, width)
+        post = post_src.read()
+        diff = post - pre
+
+        meta = pre_src.meta.copy()
+        meta.update(dtype=rasterio.float32)
+
+    with rasterio.open(output_path, 'w', **meta) as dst:
+        dst.write(diff.astype(np.float32))
+
+    print(f"Saved dglcm to {output_path}")
+
+def compute_asc_desc_dglcm(asc_image_path, desc_image_path,output_path):
+    with rasterio.open(asc_image_path) as pre_src, rasterio.open(desc_image_path) as post_src:
+        pre = pre_src.read()   # shape: (bands, height, width)
+        post = post_src.read()
+        combined = np.maximum(pre,post)
+
+        meta = pre_src.meta.copy()
+        meta.update(dtype=rasterio.float32)
+
+    with rasterio.open(output_path, 'w', **meta) as dst:
+        dst.write(combined.astype(np.float32))
+
+    print(f"Saved dglcm to {output_path}")
 

@@ -11,8 +11,13 @@ import joblib
 import pandas as pd
 from scipy.ndimage import uniform_filter
 from sklearn.decomposition import PCA
+import geopandas as gpd
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from sklearn.ensemble import RandomForestClassifier
+import matplotlib.colors as mcolors
+from sklearn.model_selection import train_test_split, KFold, cross_val_score, GridSearchCV, RandomizedSearchCV
 
-
+from sklearn.metrics import log_loss, roc_auc_score, roc_curve
 
 def evaluate_model(y_true, y_pred, average='weighted'):
     """
@@ -38,6 +43,7 @@ def evaluate_model(y_true, y_pred, average='weighted'):
     }
 
     print('Model performance')
+    print(log_loss(y_true, y_pred))
     print(f"- Accuracy: {metrics['accuracy']}")
     print(f"- F1 Score: {metrics['f1_score']}")
     print(f"- Precision Score: {metrics['precision']}")
@@ -97,10 +103,10 @@ def sar_image_average(input_sar_image_path,output_sar_image_path):
 
         with rasterio.open(output_sar_image_path, 'w', **meta) as dest:
             
-            # vh_pre = (vh_pre_1+vh_pre_2 +vh_pre_3)/3
-            # vv_pre = (vv_pre_1+vv_pre_2 + vv_pre_3)/3
-            vh_pre = (vh_pre_2 +vh_pre_3)/2
-            vv_pre = (vv_pre_2 + vv_pre_3)/2
+            vh_pre = (vh_pre_1+vh_pre_2 +vh_pre_3)/3
+            vv_pre = (vv_pre_1+vv_pre_2 + vv_pre_3)/3
+            # vh_pre = (vh_pre_2 +vh_pre_3)/2
+            # vv_pre = (vv_pre_2 + vv_pre_3)/2
             vh_post= (vh_post_1+vh_post_2+vh_post_3)/3
             vv_post= (vv_post_1+vv_post_2+vv_post_3)/3
             dest.write(vh_pre, 1)
@@ -151,7 +157,7 @@ def generate_gt(dnbr_file_path, output_gt_path):
     try:
         with rasterio.open(dnbr_file_path) as src:
             dNBR_data = src.read(1)  # Read the first band (assuming it's a single-band image)
-            print(np.min(dNBR_data),"min")
+            # print(np.min(dNBR_data),"min")
         # dNBR_data = np.nan_to_num(dNBR_data, nan=0, posinf=0, neginf=0)
         dNBR_data[dNBR_data == -3.4028235e+38] = np.nan  # Replace with NaN for better handling
 
@@ -176,7 +182,7 @@ def generate_gt(dnbr_file_path, output_gt_path):
 
         # Plot the classified image
         # Define crop bounds in array (row, col) — e.g., top:bottom, left:right
-        row_start, row_end = 220, 1600
+        row_start, row_end = 100, 1400#220, 1600
         col_start, col_end = 550, 2550
 
         # Crop the classified image
@@ -240,29 +246,39 @@ def extract_feature(add_bands, input_desc_sar_image_path,input_image_path, glcm_
 
                 desc_RBD_VH_band = desc_vh_post - desc_vh_pre
 
-                desc_RBR_VV_band = (np.log10(desc_vv_post))-(np.log10(desc_vv_pre)) #logarithmic ratio
+                desc_RBR_VV_band = (10*np.log10(desc_vv_post))-(10*np.log10(desc_vv_pre)) #logarithmic ratio
 
-                desc_RBR_VH_band = (np.log10(desc_vh_post)) - (np.log10(desc_vh_pre))
+                desc_RBR_VH_band = (10*np.log10(desc_vh_post)) - (10*np.log10(desc_vh_pre))
             
                 desc_RVI_post = (10*np.log10((4* desc_vh_post) ))-(10*np.log10(desc_vv_post+desc_vh_post)) #4* vh/(vv+vh)
                 desc_RVI_pre = (10*np.log10((4* desc_vh_pre)))-(10*np.log10(desc_vh_pre+desc_vv_pre)) #4* vh/(vv+vh)
                 desc_delta_RVI = desc_RVI_post  - desc_RVI_pre
     
 
-        # Open input raster
-        with rasterio.open(input_image_path) as src:
-            profile = src.profile  # Get metadata
-            bands = src.read()  # Read all bands
+        # # Open input raster
+        # with rasterio.open(input_image_path) as src:
+        #     profile = src.profile  # Get metadata
+        #     bands = src.read()  # Read all bands
 
-        profile.update(count=len(final_columns_names))
+        # profile.update(count=len(final_columns_names))
+        if not input_image_path and glcm_raster_path:
+            with rasterio.open(glcm_raster_path) as src:
+                    profile = src.profile  # Get metadata
+                    bands = src.read()  # Read all bands
+        else:
+            with rasterio.open(input_image_path) as src:
+                profile = src.profile  # Get metadata
+                bands = src.read()  # Read all bands
         epsilon = 1e-6
         band_index=0
+        profile.update(count=len(final_columns_names))
+
         with rasterio.open(output_image_path, "w", **profile) as dst:
-            if add_bands:
-                for i in range(len(bands)):
-                    dst.write(bands[i], i + 1)
-                    dst.set_band_description(i + 1, final_columns_names[i])  # Assign names
-                    band_index=i+1
+            # if add_bands:
+            #     for i in range(len(bands)):
+            #         dst.write(bands[i], i + 1)
+            #         dst.set_band_description(i + 1, final_columns_names[i])  # Assign names
+            #         band_index=i+1
             if thermal_image_path:
                 with rasterio.open(thermal_image_path) as TRAD_dataset:
                     trad_band = TRAD_dataset.read()
@@ -277,6 +293,13 @@ def extract_feature(add_bands, input_desc_sar_image_path,input_image_path, glcm_
                     dst.set_band_description(band_index, "dNBR")
             
             if input_image_path:
+                # Open input raster
+                # with rasterio.open(input_image_path) as src:
+                #     profile = src.profile  # Get metadata
+                #     bands = src.read()  # Read all bands
+
+                
+
                 vh_pre,vv_pre,vh_post, vv_post=bands[0],bands[1],bands[2],bands[3]
                 vv_post = np.nan_to_num(vv_post, nan=0)
                 vh_post = np.nan_to_num(vh_post, nan=0)
@@ -305,15 +328,17 @@ def extract_feature(add_bands, input_desc_sar_image_path,input_image_path, glcm_
                 dst.set_band_description(band_index, "RBD_VH")
 
                 band_index=band_index+1
-                RBR_VV_band = (np.log10(vv_post))-(np.log10(vv_pre)) #logarithmic ratio
+                RBR_VV_band = (10*np.log10(vv_post))-(10*np.log10(vv_pre)) #logarithmic ratio
+                if is_desc_available:
+                    RBR_VV_band=np.maximum(RBR_VV_band,desc_RBR_VV_band)
                 dst.write(RBR_VV_band, band_index)
                 dst.set_band_description(band_index, "RBR_VV")
                 
 
                 band_index=band_index+1
-                RBR_VH_band = (np.log10(vh_post)) - (np.log10(vh_pre))
+                RBR_VH_band = (10*np.log10(vh_post)) - (10*np.log10(vh_pre))
                 if is_desc_available:
-                    RBR_VV_band=np.maximum(RBR_VV_band,desc_RBR_VV_band)
+                    RBR_VH_band=np.maximum(RBR_VH_band,desc_RBR_VH_band)
                 dst.write(RBR_VH_band, band_index)
                 dst.set_band_description(band_index, "RBR_VH")
 
@@ -327,7 +352,6 @@ def extract_feature(add_bands, input_desc_sar_image_path,input_image_path, glcm_
                 dst.write(delta_RVI, band_index)
                 dst.set_band_description(band_index, "ΔRVI")
 
-            
             if glcm_raster_path:
                 band_index=band_index+1
                 with rasterio.open(glcm_raster_path) as glcm_dst:
@@ -339,67 +363,153 @@ def extract_feature(add_bands, input_desc_sar_image_path,input_image_path, glcm_
     except Exception as e:
         print("feature extraction error: ", str(e))
 
-        
-        
 
+# def create_fish_net(feature_image_path, gt_image_path, tile_size=100, plot_fig=True,train_ids=None,test_ids=None):
+#     try:
+#         with rasterio.open(feature_image_path) as f_src, rasterio.open(gt_image_path) as l_src:
+#             features = f_src.read()  # (bands, H, W)
+#             labels = l_src.read()   # (H, W)
+#         tiles = []
+#         positions = []
+#         for row in range(0, labels.shape[0], tile_size):
+#             for col in range(0, labels.shape[1], tile_size):
+#                 if (row + tile_size) <= labels.shape[0] and (col + tile_size) <= labels.shape[1]:
+#                     feat_patch = features[:, row:row+tile_size, col:col+tile_size]
+#                     label_patch = labels[row:row+tile_size, col:col+tile_size]
+#                     tiles.append(((row, col), feat_patch, label_patch))
+#                     positions.append((row, col))
+#         if plot_fig:
+#             fig, ax = plt.subplots(figsize=(10, 10))
+#             ax.imshow(labels)
 
+#             for idx, (row, col) in enumerate(positions):
+#                 if idx in train_ids:
+#                     face_color = 'green'
+#                 elif idx in test_ids:
+#                     face_color = 'blue'
+#                 # elif idx in val_ids:
+#                 #     face_color = 'orange'
+#                 else:
+#                     # continue
+#                     face_color = 'red'
+#                     # opacity=1
 
-def create_fish_net(feature_image_path, gt_image_path, tile_size=100, plot_fig=True,train_ids=None,test_ids=None):
+#                 # Draw semi-transparent rectangle
+#                 rect = plt.Rectangle((col, row), tile_size, tile_size,
+#                                     linewidth=1.5, edgecolor=face_color,
+#                                     facecolor=face_color, alpha=0.4)
+#                 ax.add_patch(rect)
+
+#                 # Label tile index
+#                 ax.text(col + tile_size // 2, row + tile_size // 2, str(idx),
+#                         fontsize=7, color='black', ha='center', va='center')
+
+#             # Legend
+#             legend_elements = [
+#                 Patch(facecolor='green', edgecolor='green', label='Train'),
+#                 Patch(facecolor='blue', edgecolor='blue', label='Test'),
+#                 # Patch(facecolor='orange', edgecolor='orange', label='Validation')
+#             ]
+#             ax.legend(handles=legend_elements, loc='upper right')
+
+#             plt.title("Fishnet with Colored Tiles (Transparent Fill)")
+#             plt.tight_layout()
+#             plt.show()
+#         print("fishnet tile generation done")
+#         return tiles
+    
+#     except Exception as e:
+#         print("error in fishnet: ", str(e))
+import matplotlib.pyplot as plt
+import numpy as np
+import rasterio
+from matplotlib.patches import Patch
+
+def create_fish_net(feature_image_path, label_image_path, tile_size=100, plot_fig=True, train_ids=None, test_ids=None):
     try:
-        with rasterio.open(feature_image_path) as f_src, rasterio.open(gt_image_path) as l_src:
+        opacity=0.3
+        is_rgb=False
+        with rasterio.open(feature_image_path) as f_src, rasterio.open(label_image_path) as l_src:
             features = f_src.read()  # (bands, H, W)
-            labels = l_src.read(1)   # (H, W)
+            labels = l_src.read() 
+            if l_src.count != 1:
+                is_rgb=True
+                labels = l_src.read([4,1,2]) 
+            labels = np.transpose(labels, (1, 2, 0))
+        # if labels.shape[0] != 3:
+        #     raise ValueError("Expected RGB label image with 3 bands.")
+
+        if is_rgb:
+            # Transpose to (H, W, 3) for visualization
+            # label_rgb = np.transpose(labels, (1, 2, 0))
+
+            p2 = np.percentile(labels, 2)
+            p98 = np.percentile(labels, 98)
+
+            label_rgb = np.clip(labels, p2, p98)  # Clip extremes
+            label_rgb = (label_rgb - p2) / (p98 - p2) * 255
+            labels = np.clip(label_rgb, 0, 255).astype(np.uint8)
+
         tiles = []
         positions = []
+
         for row in range(0, labels.shape[0], tile_size):
             for col in range(0, labels.shape[1], tile_size):
                 if (row + tile_size) <= labels.shape[0] and (col + tile_size) <= labels.shape[1]:
                     feat_patch = features[:, row:row+tile_size, col:col+tile_size]
-                    label_patch = labels[row:row+tile_size, col:col+tile_size]
+                    label_patch = labels[row:row+tile_size, col:col+tile_size, :]
                     tiles.append(((row, col), feat_patch, label_patch))
                     positions.append((row, col))
+
         if plot_fig:
             fig, ax = plt.subplots(figsize=(10, 10))
-            ax.imshow(labels, cmap='gray')
+            ax.imshow(labels)
 
+            # if is_rgb:
+            # else:
+            #     ax.imshow(labels.squeeze())
             for idx, (row, col) in enumerate(positions):
                 if idx in train_ids:
                     face_color = 'green'
+                    opacity=0.4
+                    
                 elif idx in test_ids:
                     face_color = 'blue'
-                # elif idx in val_ids:
-                #     face_color = 'orange'
+                    opacity=0.4
+                    
                 else:
                     # continue
-                    face_color = 'red'
-                    # opacity=1
-
-                # Draw semi-transparent rectangle
+                    face_color=None
+                    opacity=0.1
+                    
+                                        
                 rect = plt.Rectangle((col, row), tile_size, tile_size,
-                                    linewidth=1.5, edgecolor=face_color,
-                                    facecolor=face_color, alpha=0.4)
+                                     linewidth=1, edgecolor="black",
+                                     facecolor=face_color, alpha=opacity)
                 ax.add_patch(rect)
 
-                # Label tile index
                 ax.text(col + tile_size // 2, row + tile_size // 2, str(idx),
                         fontsize=7, color='black', ha='center', va='center')
+            print("113")
 
-            # Legend
             legend_elements = [
                 Patch(facecolor='green', edgecolor='green', label='Train'),
                 Patch(facecolor='blue', edgecolor='blue', label='Test'),
-                # Patch(facecolor='orange', edgecolor='orange', label='Validation')
+                # Patch(facecolor='red', edgecolor='red', label='Other')
             ]
             ax.legend(handles=legend_elements, loc='upper right')
-
-            plt.title("Fishnet with Colored Tiles (Transparent Fill)")
+            plt.title("Train and Test Tile Selection")
             plt.tight_layout()
+            plt.grid(False)
+            ax.set_xticks([])  # Remove x-axis labels
+            ax.set_yticks([])
             plt.show()
-        print("fishnet tile generation done")
+
+        print("Fishnet tile generation done")
         return tiles
-    
+
     except Exception as e:
-        print("error in fishnet: ", str(e))
+        print("Error in fishnet: ", str(e))
 
 
 def tiles_to_samples(tile_list):
@@ -459,7 +569,15 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
         X_train, y_train, X_test, y_test = prepare_training_sample(tiles, train_ids,test_ids)
         print(X_train.shape,y_train.shape,"hbfhsdvchsdvch")
 
-        model.fit(X_train, y_train)
+        if model_name=="XGB":
+            model.fit(
+                X_train, y_train,
+                eval_set=[(X_test, y_test)],
+                # early_stopping_rounds=30,
+                # verbose=True
+            )
+        else:
+            model.fit(X_train, y_train)
 
         #Make a prediction
         
@@ -611,6 +729,7 @@ def compute_pca(input_image, output_path):
 
     pixels = bands.reshape(bands.shape[0], -1).T  # Transpose to have shape (num_pixels, num_bands)
     pixels = np.nan_to_num(pixels, nan=0.0) 
+    print(np.min(pixels),np.max(pixels))
 
     pca = PCA(n_components=3)  # Get the first 5 principal components
     principal_components = pca.fit_transform(pixels)  # Shape will be (num_pixels, 5)
@@ -620,6 +739,7 @@ def compute_pca(input_image, output_path):
 
     principal_components_image = principal_components.T.reshape(num_components, bands.shape[1], bands.shape[2])
 
+    print(np.min(principal_components_image[0]),np.max(principal_components_image[0]))
     plt.figure(figsize=(15, 15))
     for i in range(num_components):
         plt.subplot(1, num_components, i+1)
@@ -663,3 +783,60 @@ def compute_asc_desc_dglcm(asc_image_path, desc_image_path,output_path):
 
     print(f"Saved dglcm to {output_path}")
 
+
+def get_bbox(aoi_path):
+    aoi_gdf = gpd.read_file(aoi_path)
+
+    # Extract the bounding box (minx, miny, maxx, maxy)
+    bbox = aoi_gdf.total_bounds  # This gives the bounding box as a list [minx, miny, maxx, maxy]
+
+    print("Bounding Box:", bbox)
+    return bbox
+
+
+def get_best_hyperparameter(random_search_model,feature_image_path,gt_image_path,rf_params,train_ids,tile_size):
+    # Define parameter grid
+    # rf_params = {
+    #     'n_estimators': [50, 100, 150],  # Number of trees
+    #     'max_depth': [10, 20,30],  # Depth of trees
+    #     'min_samples_split': [10, 20, 40],  # Minimum samples to split
+    #     'max_features': [2, 4, 'sqrt', 'log2'],  # Features to consider at each split
+    #     'class_weight': ['balanced_subsample', 'balanced'],  # Handle class imbalance
+    #     'max_samples': [0.3,0.5, 0.7],  # Fraction of samples to train each tree on
+    # }
+
+    # Initialize GridSearchCV with parameter grid
+    # grid_search = RandomizedSearchCV(estimator=RandomForestClassifier(), param_grid=rf_params, cv=3, verbose=2, n_jobs=-1)
+    # grid_search = RandomizedSearchCV(estimator=RandomForestClassifier(), param_distributions=rf_params, cv=3, verbose=2, n_jobs=-1)
+
+    # feature_image_path="MachineLearning/output/feature_image/palisades_sar_avg_asc_desc.tif"
+    # gt_image_path="MachineLearning/gt/palisades_label_0_17.tif"
+    cv_split = KFold(n_splits=5, random_state=42, shuffle=True)
+
+    rf_random_search=RandomizedSearchCV(
+        estimator=random_search_model,
+        param_distributions=rf_params,
+        n_iter=200,
+        scoring="neg_log_loss",
+        refit=True,
+        return_train_score=True,
+        cv=cv_split,    
+        verbose=10,
+        n_jobs=-1,
+        random_state=42
+    )
+    tiles=create_fish_net(feature_image_path, gt_image_path, tile_size=tile_size,plot_fig=False)
+
+    # train_ids = [154, 351,345,340, 184, 478,355,178,368,88,172,439,303,219,375,435]
+    # train_ids = [146,129,123,344,378,248,132,189,242,297,321,235,356]
+    test_ids=[]
+
+    # X_train, X_test, y_train, y_test = prepare_training_sample(sample_feature_path, feature_column_names, class_column_name,drop_columns, corr_mat_dir, model_name, extended_file_name)
+    X_train, y_train, X_test, y_test = prepare_training_sample(tiles, train_ids,test_ids)
+    # print(X_train.shape,y_train.shape,"hbfhsdvchsdvch")
+
+    # Fit the model
+    rf_random_search.fit(X_train, y_train)
+
+    # Print the best parameters found
+    print(rf_random_search.best_params_)

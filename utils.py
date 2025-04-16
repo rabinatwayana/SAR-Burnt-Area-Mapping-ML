@@ -216,7 +216,7 @@ def generate_gt(dnbr_file_path, output_gt_path):
 
         # Plot the classified image
         # Define crop bounds in array (row, col) — e.g., top:bottom, left:right
-        row_start, row_end = 100, 1400#220, 1600
+        row_start, row_end = 100, 1400
         col_start, col_end = 550, 2550
 
         # Crop the classified image
@@ -729,21 +729,21 @@ def predict(model, image_path, output_file_path,output_image_path,title ):
 
     print(f"Predictions saved to {output_file_path}")
 
-    pred_dataset = rasterio.open(output_file_path)
 
+    pred_dataset = rasterio.open(output_file_path)
     # Read the first band of the image (you can adjust for multi-band images)
     pred_band_1 = pred_dataset.read(1)
-
+    row_start, row_end = 100, 1400
+    col_start, col_end = 550, 2550
+    # Crop the classified image
+    clipped_img = pred_band_1[row_start:row_end, col_start:col_end]
     # Plot the image
-    plt.figure(figsize=(10, 10))
+    plt.figure(figsize=(6, 6))
+    plt.axis('off')
     cmap = mcolors.ListedColormap(['#1dc47c', '#c41d28'])
 
     # Plot the image with the custom colormap
-    plt.imshow(pred_band_1, cmap=cmap, interpolation='nearest')
-    # plt.imshow(pred_band_1, cmap='gray',interpolation='nearest')  # You can adjust the colormap if needed
-    # cbar = plt.colorbar(ticks=[0, 1])
-    # cbar.ax.set_yticklabels(['No', 'Yes']) 
-    # plt.colorbar()
+    plt.imshow(clipped_img, cmap=cmap, interpolation='nearest')
     plt.title(title)
     # Create custom legend
     legend_patches = [
@@ -751,7 +751,7 @@ def predict(model, image_path, output_file_path,output_image_path,title ):
         mpatches.Patch(color='#1dc47c', label='Non-Burnt')
     ]
 
-    plt.legend(handles=legend_patches, loc='lower right', frameon=True)
+    # plt.legend(handles=legend_patches, loc='lower right', frameon=True)
     plt.savefig(output_image_path,bbox_inches='tight', dpi=300)
 
     plt.show()

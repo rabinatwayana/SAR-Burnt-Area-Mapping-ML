@@ -16,7 +16,7 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.ensemble import RandomForestClassifier
 import matplotlib.colors as mcolors
 from sklearn.model_selection import train_test_split, KFold, cross_val_score, GridSearchCV, RandomizedSearchCV
-
+from skimage.morphology import remove_small_objects
 from sklearn.metrics import log_loss, roc_auc_score, roc_curve
 
 def evaluate_model(y_true, y_pred, average='weighted'):
@@ -179,6 +179,7 @@ def generate_gt(dnbr_file_path, output_gt_path):
 
         # Classify the dNBR image using the threshold (Burnt vs Non-burnt)
         classified_image = dNBR_data > threshold
+        # classified_image = dNBR_data < 0.25
 
         # Plot the classified image
         # Define crop bounds in array (row, col) — e.g., top:bottom, left:right
@@ -583,13 +584,24 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
         
         if train_ids:
             y_train_pred=model.predict(X_train)
-            print('Model performance for Training set')
-            metrics_train=evaluate_model(y_train,y_train_pred)
+            print('Model performance for Training set smooth')
+            smoothed_pred = uniform_filter(y_train_pred.astype(float), size=5)
+            # Convert back to 0/1
+            y_train_pred_processed = (smoothed_pred > 0.5).astype(int)
+
+            metrics_train=evaluate_model(y_train,y_train_pred_processed)
+
         if test_ids:
             y_test_pred=model.predict(X_test)
+            # print('Model performance for Test set')
+            # metrics_test=evaluate_model(y_test,y_test_pred)
+
             print("--------------")
-            print('Model performance for Test set')
-            metrics_test=evaluate_model(y_test,y_test_pred)
+            print('Model performance for Test set smooth')
+            smoothed_pred = uniform_filter(y_test_pred.astype(float), size=5)
+            # Convert back to 0/1
+            y_test_pred_processed = (smoothed_pred > 0.5).astype(int)
+            metrics_test=evaluate_model(y_test,y_test_pred_processed)
             print("----------------------------------------")
         # if val_ids:
         #     y_val_pred=model.predict(X_val)
@@ -648,9 +660,17 @@ def predict(model, image_path, output_file_path,output_image_path,title ):
     print(np.unique(predictions))
 
     # Assuming predictions are a 2D array (for an image or spatial data)
-    predictions = uniform_filter(predictions, size=7)  # size is the window size
+    predictions = uniform_filter(predictions, size=5)  # size is the window size
 
     # predictions = model.predict(scaler.transform(pixels))
+    # Binary classification: make sure values are 0 and 1
+    # binary_prediction = (predictions > 0.5).astype(int)  # You may adjust threshold
+
+    # # 🧹 Remove small objects (<100 pixels)
+    # cleaned_prediction = remove_small_objects(binary_prediction.astype(bool), min_size=7)
+
+    # # Convert back to integer image
+    # predictions = cleaned_prediction.astype(np.uint8)
 
 
     # Reshape predictions to match the image dimensions

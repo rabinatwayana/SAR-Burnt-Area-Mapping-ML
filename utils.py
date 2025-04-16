@@ -741,7 +741,7 @@ def glcm_average(input_path, output_path):
     print(f"Averaged raster saved as: {output_path}")
 
 
-def compute_pca(input_image, output_path):
+def compute_pca(input_image, output_path,n_components=3):
 
     with rasterio.open(input_image) as src:
         bands = src.read()  # Shape will be (bands, height, width)
@@ -751,7 +751,7 @@ def compute_pca(input_image, output_path):
     pixels = np.nan_to_num(pixels, nan=0.0) 
     print(np.min(pixels),np.max(pixels))
 
-    pca = PCA(n_components=3)  # Get the first 5 principal components
+    pca = PCA(n_components=n_components)  # Get the first 5 principal components
     principal_components = pca.fit_transform(pixels)  # Shape will be (num_pixels, 5)
 
     num_components = pca.n_components_

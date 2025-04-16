@@ -18,6 +18,7 @@ import matplotlib.colors as mcolors
 from sklearn.model_selection import train_test_split, KFold, cross_val_score, GridSearchCV, RandomizedSearchCV
 from skimage.morphology import remove_small_objects
 from sklearn.metrics import log_loss, roc_auc_score, roc_curve
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay,classification_report
 
 def evaluate_model(y_true, y_pred, average='weighted'):
     """
@@ -32,23 +33,33 @@ def evaluate_model(y_true, y_pred, average='weighted'):
         dict: Dictionary containing accuracy, f1-score, precision, recall, and roc-auc-score.
     """
 
-
+    cm = confusion_matrix(y_true, y_pred)
     metrics = {
+        "log_loss": log_loss(y_true, y_pred),
         'accuracy': accuracy_score(y_true, y_pred),
         'f1_score': f1_score(y_true, y_pred, average=average),
         'precision': precision_score(y_true, y_pred, average=average, zero_division=0),
         'recall': recall_score(y_true, y_pred, average=average),
         # 'roc_auc': roc_auc_score(y_true, y_pred, multi_class='ovr') if len(set(y_true)) > 2 else roc_auc_score(y_true, y_pred)
-        'roc_auc': roc_auc_score(y_true, y_pred)
+        'roc_auc': roc_auc_score(y_true, y_pred),
+         "confusion_matrix": cm
     }
+    
+    # Display it
+    # disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+    # disp.plot(cmap=plt.cm.Blues)
+    # plt.title("Confusion Matrix")
+    # plt.show()
 
     print('Model performance')
-    print(log_loss(y_true, y_pred))
+    # print(log_loss(y_true, y_pred))
+    print(f"- Log loss: {metrics['log_loss']}")
     print(f"- Accuracy: {metrics['accuracy']}")
     print(f"- F1 Score: {metrics['f1_score']}")
     print(f"- Precision Score: {metrics['precision']}")
     print(f"- Recall Score: {metrics['accuracy']}")
     print(f"- Roc Auc Score: {metrics['roc_auc']}")
+    print(f"- confusion_matrix: {metrics['confusion_matrix']}")
 
     return metrics
 
@@ -75,6 +86,28 @@ def clip_image(input_path, output_path, clip_extent):
         print(f"clip image saved into  {output_path}")
     except Exception as e:
         print("clip_image error: ",str(e))
+
+
+def sar_single_date_image(input_sar_image_path,output_sar_image_path):
+    try:
+        with rasterio.open(input_sar_image_path) as dataset:
+            vh_pre_3= dataset.read(5)
+            vv_pre_3= dataset.read(6)
+
+            vh_post_1= dataset.read(7)
+            vv_post_1= dataset.read(8)
+
+            meta=dataset.meta.copy()
+            meta.update({"count":4})
+
+        with rasterio.open(output_sar_image_path, 'w', **meta) as dest:
+            dest.write(vh_pre_3, 1)
+            dest.write(vv_pre_3, 2)
+            dest.write(vh_post_1, 3)
+            dest.write(vv_post_1, 4)
+        print(f"Average image saved into  {output_sar_image_path}")
+    except Exception as e:
+        print("sar average error: ", str(e))
 
 def sar_image_average(input_sar_image_path,output_sar_image_path):
     try:
@@ -117,36 +150,36 @@ def sar_image_average(input_sar_image_path,output_sar_image_path):
     except Exception as e:
         print("sar average error: ", str(e))
 
-def merge_asc_desc_sar(asc_image_path, desc_image_path, output_path):
-    try:
-        with rasterio.open(asc_image_path) as asc_dataset, rasterio.open(desc_image_path) as desc_dataset:
-            meta=asc_dataset.meta.copy()
-            asc_vh_pre = asc_dataset.read(1)
-            asc_vv_pre = asc_dataset.read(2)
+# def merge_asc_desc_sar(asc_image_path, desc_image_path, output_path):
+#     try:
+#         with rasterio.open(asc_image_path) as asc_dataset, rasterio.open(desc_image_path) as desc_dataset:
+#             meta=asc_dataset.meta.copy()
+#             asc_vh_pre = asc_dataset.read(1)
+#             asc_vv_pre = asc_dataset.read(2)
 
-            asc_vh_post = asc_dataset.read(3)
-            asc_vv_post = asc_dataset.read(4)
+#             asc_vh_post = asc_dataset.read(3)
+#             asc_vv_post = asc_dataset.read(4)
 
-            desc_vh_pre = desc_dataset.read(1)
-            desc_vv_pre = desc_dataset.read(2)
+        #     desc_vh_pre = desc_dataset.read(1)
+        #     desc_vv_pre = desc_dataset.read(2)
 
-            desc_vh_post = desc_dataset.read(3)
-            desc_vv_post = desc_dataset.read(4)
+        #     desc_vh_post = desc_dataset.read(3)
+        #     desc_vv_post = desc_dataset.read(4)
 
-        with rasterio.open(output_path, 'w', **meta) as dest:
-            # vh_pre = (asc_vh_pre+desc_vh_pre )/2
-            # vv_pre = (asc_vv_pre+desc_vv_pre )/2
-            # vh_post= (asc_vh_post+desc_vh_post)/2
-            # vv_post= (asc_vv_post+desc_vv_post)/2
-            vh_pre = np.maximum(asc_vh_pre,desc_vh_pre )
-            vv_pre = np.maximum(asc_vv_pre,desc_vv_pre )
-            vh_post= np.maximum(asc_vh_post,desc_vh_post)
-            vv_post= np.maximum(asc_vv_post,desc_vv_post)
-            dest.write(vh_pre, 1)
-            dest.write(vv_pre, 2)
-            dest.write(vh_post, 3)
-            dest.write(vv_post, 4)
-        print(f"asc_desc image saved into  {output_path}")
+        # with rasterio.open(output_path, 'w', **meta) as dest:
+        #     vh_pre = (asc_vh_pre+desc_vh_pre )/2
+        #     vv_pre = (asc_vv_pre+desc_vv_pre )/2
+        #     vh_post= (asc_vh_post+desc_vh_post)/2
+        #     vv_post= (asc_vv_post+desc_vv_post)/2
+        #     # vh_pre = np.maximum(asc_vh_pre,desc_vh_pre )
+        #     # vv_pre = np.maximum(asc_vv_pre,desc_vv_pre )
+        #     # vh_post= np.maximum(asc_vh_post,desc_vh_post)
+        #     # vv_post= np.maximum(asc_vv_post,desc_vv_post)
+        #     dest.write(vh_pre, 1)
+        #     dest.write(vv_pre, 2)
+        #     dest.write(vh_post, 3)
+        #     dest.write(vv_post, 4)
+        # print(f"asc_desc image saved into  {output_path}")
 
 
     except Exception as e:
@@ -316,7 +349,9 @@ def extract_feature(add_bands, input_desc_sar_image_path,input_image_path, glcm_
                 band_index=band_index+1
                 RBD_VV_band = vv_post - vv_pre
                 if is_desc_available:
-                    RBD_VV_band=np.maximum(RBD_VV_band,desc_RBD_VV_band)
+                    # RBD_VV_band=np.maximum(RBD_VV_band,desc_RBD_VV_band)
+                    RBD_VV_band=(RBD_VV_band+desc_RBD_VV_band)/2
+
                 dst.write(RBD_VV_band, band_index)
                 dst.set_band_description(band_index, "RBD_VV")
 
@@ -324,14 +359,18 @@ def extract_feature(add_bands, input_desc_sar_image_path,input_image_path, glcm_
                 band_index=band_index+1
                 RBD_VH_band = vh_post - vh_pre
                 if is_desc_available:
-                    RBD_VH_band=np.maximum(RBD_VH_band,desc_RBD_VH_band)
+                    # RBD_VH_band=np.maximum(RBD_VH_band,desc_RBD_VH_band)
+                    RBD_VH_band=(RBD_VH_band+desc_RBD_VH_band)/2
+
                 dst.write(RBD_VH_band, band_index)
                 dst.set_band_description(band_index, "RBD_VH")
 
                 band_index=band_index+1
                 RBR_VV_band = (10*np.log10(vv_post))-(10*np.log10(vv_pre)) #logarithmic ratio
                 if is_desc_available:
-                    RBR_VV_band=np.maximum(RBR_VV_band,desc_RBR_VV_band)
+                    # RBR_VV_band=np.maximum(RBR_VV_band,desc_RBR_VV_band)
+                    RBR_VV_band=(RBR_VV_band+desc_RBR_VV_band)/2
+
                 dst.write(RBR_VV_band, band_index)
                 dst.set_band_description(band_index, "RBR_VV")
                 
@@ -339,7 +378,9 @@ def extract_feature(add_bands, input_desc_sar_image_path,input_image_path, glcm_
                 band_index=band_index+1
                 RBR_VH_band = (10*np.log10(vh_post)) - (10*np.log10(vh_pre))
                 if is_desc_available:
-                    RBR_VH_band=np.maximum(RBR_VH_band,desc_RBR_VH_band)
+                    # RBR_VH_band=np.maximum(RBR_VH_band,desc_RBR_VH_band)
+                    RBR_VH_band=(RBR_VH_band+desc_RBR_VH_band)/2
+
                 dst.write(RBR_VH_band, band_index)
                 dst.set_band_description(band_index, "RBR_VH")
 
@@ -349,7 +390,9 @@ def extract_feature(add_bands, input_desc_sar_image_path,input_image_path, glcm_
                 RVI_pre = (10*np.log10((4* vh_pre)))-(10*np.log10(vh_pre+vv_pre)) #4* vh/(vv+vh)
                 delta_RVI = RVI_post  - RVI_pre
                 if is_desc_available:
-                    delta_RVI=np.maximum(delta_RVI,desc_delta_RVI)
+                    # delta_RVI=np.maximum(delta_RVI,desc_delta_RVI)
+                    delta_RVI=(delta_RVI+desc_delta_RVI)/2
+
                 dst.write(delta_RVI, band_index)
                 dst.set_band_description(band_index, "ΔRVI")
 
@@ -553,7 +596,7 @@ def prepare_training_sample(tiles, train_ids, test_ids):
 
 
 # def run_model(feature_image_path,gt_image_path, sample_feature_path, feature_column_names, drop_columns, class_column_name ,models,output_model_dir, output_feat_imp_dir, corr_mat_dir, extended_file_name):
-def run_model(feature_image_path,gt_image_path, feature_column_names,model_name, model,output_model_dir, output_feat_imp_dir, extended_file_name, train_ids, test_ids, tile_size=100,):
+def run_model(feature_image_path,gt_image_path, feature_column_names,model_name, model,output_model_dir, output_feat_imp_dir, extended_file_name, train_ids, test_ids, tile_size=100):
     try:
         # metrics_combined=[]
         # for i in range(len(list(models))):
@@ -660,14 +703,14 @@ def predict(model, image_path, output_file_path,output_image_path,title ):
     print(np.unique(predictions))
 
     # Assuming predictions are a 2D array (for an image or spatial data)
-    predictions = uniform_filter(predictions, size=5)  # size is the window size
+    predictions = uniform_filter(predictions, size=4)  # size is the window size
 
     # predictions = model.predict(scaler.transform(pixels))
     # Binary classification: make sure values are 0 and 1
     # binary_prediction = (predictions > 0.5).astype(int)  # You may adjust threshold
 
     # # 🧹 Remove small objects (<100 pixels)
-    # cleaned_prediction = remove_small_objects(binary_prediction.astype(bool), min_size=7)
+    # cleaned_prediction = remove_small_objects(binary_prediction.astype(bool), min_size=10)
 
     # # Convert back to integer image
     # predictions = cleaned_prediction.astype(np.uint8)
@@ -712,6 +755,35 @@ def predict(model, image_path, output_file_path,output_image_path,title ):
     plt.savefig(output_image_path,bbox_inches='tight', dpi=300)
 
     plt.show()
+
+
+def glcm_single(input_path, output_path,start_index,end_index):
+
+    with rasterio.open(input_path) as src:
+        meta = src.meta.copy()
+        meta.update(count=20)  # output will have 20 bands
+
+        # Read all 60 bands
+        bands = src.read()  # shape: (60, height, width)
+
+        # Prepare the output stack
+        # averaged_stack = np.zeros((20, src.height, src.width), dtype=full_stack.dtype)
+
+        # for i in range(20):
+        #     band1 = full_stack[i, :, :]
+        #     band2 = full_stack[i + 20, :, :]
+        #     band3 = full_stack[i + 40, :, :]
+
+        #     averaged_stack[i] = (band1 + band2 + band3) / 3
+
+    # Write the output raster
+    index=1
+    with rasterio.open(output_path, 'w', **meta) as dst:
+        for i in range(start_index,end_index):
+            dst.write(bands[i],index)
+            index=index+1
+
+    print(f"Averaged raster saved as: {output_path}")
 
 
 
@@ -793,7 +865,9 @@ def compute_asc_desc_dglcm(asc_image_path, desc_image_path,output_path):
     with rasterio.open(asc_image_path) as pre_src, rasterio.open(desc_image_path) as post_src:
         pre = pre_src.read()   # shape: (bands, height, width)
         post = post_src.read()
-        combined = np.maximum(pre,post)
+        # combined = np.maximum(pre,post)
+        combined = (pre+post)/2
+
 
         meta = pre_src.meta.copy()
         meta.update(dtype=rasterio.float32)

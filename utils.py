@@ -19,6 +19,7 @@ from sklearn.model_selection import train_test_split, KFold, cross_val_score, Gr
 from skimage.morphology import remove_small_objects
 from sklearn.metrics import log_loss, roc_auc_score, roc_curve
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay,classification_report
+from xgboost import XGBClassifier
 
 def evaluate_model(y_true, y_pred, average='weighted'):
     """
@@ -596,7 +597,7 @@ def prepare_training_sample(tiles, train_ids, test_ids):
 
 
 # def run_model(feature_image_path,gt_image_path, sample_feature_path, feature_column_names, drop_columns, class_column_name ,models,output_model_dir, output_feat_imp_dir, corr_mat_dir, extended_file_name):
-def run_model(feature_image_path,gt_image_path, feature_column_names,model_name, model,output_model_dir, output_feat_imp_dir, extended_file_name, train_ids, test_ids, tile_size=100):
+def run_model(feature_image_path,gt_image_path, feature_column_names,model_name, model,model_param,output_model_dir, output_feat_imp_dir, extended_file_name, train_ids, test_ids, tile_size=100):
     try:
         # metrics_combined=[]
         # for i in range(len(list(models))):
@@ -611,16 +612,28 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
 
         # X_train, X_test, y_train, y_test = prepare_training_sample(sample_feature_path, feature_column_names, class_column_name,drop_columns, corr_mat_dir, model_name, extended_file_name)
         X_train, y_train, X_test, y_test = prepare_training_sample(tiles, train_ids,test_ids)
-        print(X_train.shape,y_train.shape,"hbfhsdvchsdvch")
 
         if model_name=="XGB":
+            val_ids=[312,202,209,105,214,300,374,304,292,48]
+            X_val, y_val, _, _ = prepare_training_sample(tiles, val_ids, [])
+            num_negative = np.sum(y_train == 0)
+            num_positive = np.sum(y_train == 1)
+            scale_pos_weight = num_negative / num_positive
+
+            # Update your params
+            model_param['scale_pos_weight'] = scale_pos_weight
+
+            # Create model
+            model = XGBClassifier(**model_param)
+
             model.fit(
                 X_train, y_train,
-                eval_set=[(X_test, y_test)],
-                # early_stopping_rounds=30,
+                eval_set=[(X_val, y_val)],
+                # early_stopping_rounds=10,
                 # verbose=True
             )
         else:
+
             model.fit(X_train, y_train)
 
         #Make a prediction
@@ -652,18 +665,23 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
         #     metrics_test=evaluate_model(y_val,y_val_pred)
         #     print("----------------------------------------")
 
-
+ 
         metrics={
+        'log_loss_train': round(metrics_train['log_loss'],4), 
         'acc_train': round(metrics_train['accuracy'],4),
         'f1_train': round(metrics_train['f1_score'],4),
         'precision_train': round(metrics_train['precision'],4),
         'recall_train': round(metrics_train['recall'],4),
         'roc_auc_train': round(metrics_train['roc_auc'],4),
+        'log_loss_test': round(metrics_test['log_loss'],4), 
+
         'acc_test': round(metrics_test['accuracy'],4),
         'f1_test': round(metrics_test['f1_score'],4),
         'precision_test': round(metrics_test['precision'],4),
         'recall_test': round(metrics_test['recall'],4),
         'roc_auc_test': round(metrics_test['roc_auc'],4),
+        'cm_train': metrics_train['confusion_matrix'],
+        'cm_test': metrics_test['confusion_matrix'],
         }
         # metrics_combined.append(metrics)
 

@@ -1,4 +1,4 @@
-# Burned Area Mapping using SAR Imagery and Machine Learning Approach
+![handout_v2](https://github.com/user-attachments/assets/3f173e0c-8112-489e-934f-0996e8ec4f6b)
 
 Data will be provided under request.
 

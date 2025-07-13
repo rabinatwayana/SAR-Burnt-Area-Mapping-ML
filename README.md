@@ -29,15 +29,7 @@
 Machine Learning folders consists of notebooks for following tasks:
 
    ### 1. Data preparation
-This notebook handles the initial data preparation steps, including:
-
-Loading raw SAR satellite data.
-
-Cleaning and filtering the data (e.g., removing noise, handling missing values).
-
-Feature extraction such as calculating backscatter coefficients or texture measures.
-
-Normalizing and scaling features to prepare them for model training.
+This notebook handles the initial data preparation steps, including generation of ground truth, cropping the data into same extent, and creating train and test tile selection images.
 
 Splitting the dataset into training and testing sets.
 
@@ -45,18 +37,10 @@ Splitting the dataset into training and testing sets.
 Extract the SAR related features such as RVI, RBD, RBR etc.
 
 ### 3. Training models
-Performing hyperparameter tuning using techniques like grid search.
-
-Evaluating model performance with metrics such as accuracy, precision, recall, and F1-score.
-
-Saving the best model for later use in prediction.
+This notebook performs hyperparameter tuning using techniques like grid search, evaluates model performance with metrics such as accuracy, precision, recall, and F1-score, and saves the best model for future predictions.
 
 ### 3. Prediction
-Load the trained model.
-
-Apply the model to new SAR images to generate burned area predictions.
-
-Export results as GeoTIFF and png for further GIS analysis.
+his notebook loads the trained model, applies it to new SAR images to generate burned area predictions, and exports the results as GeoTIFF and PNG files for further GIS analysis.
 
 ### 4. Feature Importance
 Visualize which input features contribute the most to the predictive performance of the trained machine learning model

@@ -701,7 +701,7 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
         print(f"error in run model: ", str(e))
 
 
-def predict(model, image_path, output_file_path,output_image_path,title ):
+def predict(model, image_path, output_file_path,output_image_path,title,show_legend=False ):
     dataset = rasterio.open(image_path)
     print(dataset.count)
 
@@ -758,18 +758,24 @@ def predict(model, image_path, output_file_path,output_image_path,title ):
     # Plot the image
     plt.figure(figsize=(6, 6))
     plt.axis('off')
-    cmap = mcolors.ListedColormap(['#1dc47c', '#c41d28'])
+    # cmap = mcolors.ListedColormap(['#1dc47c', '#c41d28'])
+    # cmap = mcolors.ListedColormap(['#b6f2c0', '#964B00'])
+    # cmap = mcolors.ListedColormap(['#A6D96A', '#8B0000'])
+    cmap = mcolors.ListedColormap(['#b6f2c0', '#8B0000'])
+
+
+
 
     # Plot the image with the custom colormap
     plt.imshow(clipped_img, cmap=cmap, interpolation='nearest')
     plt.title(title)
     # Create custom legend
     legend_patches = [
-        mpatches.Patch(color='#c41d28', label='Burnt'),
-        mpatches.Patch(color='#1dc47c', label='Non-Burnt')
+        mpatches.Patch(color='#964B00', label='Burned'),
+        mpatches.Patch(color='#b6f2c0', label='Unburned')
     ]
-
-    # plt.legend(handles=legend_patches, loc='lower right', frameon=True)
+    if show_legend:
+        plt.legend(handles=legend_patches, loc='lower right', frameon=True,framealpha=1)
     plt.savefig(output_image_path,bbox_inches='tight', dpi=300)
 
     plt.show()

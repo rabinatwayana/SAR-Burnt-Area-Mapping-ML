@@ -9,8 +9,11 @@
 1. Clone the repository:
    ```bash
    git clone https://github.com/yourusername/burned-area-mapping.git
+   ```bash
    cd burned-area-mapping
+   ```bash
    conda env create -f environment.yml
+   ```bash
    conda activate wildfire_burnet_env
    
 

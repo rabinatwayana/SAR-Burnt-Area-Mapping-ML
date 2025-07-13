@@ -5,14 +5,18 @@
 [Handout](https://github.com/user-attachments/files/20343101/A1_Handout_Twayana.pdf)
 
 ## 🛠 Project Setup
-
-1. Clone the repository:
+   Clone the repository:
    ```bash
    git clone https://github.com/yourusername/burned-area-mapping.git
+   
    ```bash
    cd burned-area-mapping
+
+   Create conda environment
    ```bash
    conda env create -f environment.yml
+
+   Activate environment
    ```bash
    conda activate wildfire_burnet_env
    

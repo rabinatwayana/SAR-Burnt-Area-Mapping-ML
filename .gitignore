@@ -1,7 +1,7 @@
 .DS_Store
 DeepLearning/model/
-MachineLearning/input/
-MachineLearning/output/
+MachineLearning/input/*
+MachineLearning/output/*
 MachineLearning/test/
 LSTM/output
 LSTM/__pycache__
@@ -11,3 +11,4 @@ MachineLearning/intermediate/
 backup/
 __pycache__
 __pycache__/
+MachineLearning/pre_processed_data/*

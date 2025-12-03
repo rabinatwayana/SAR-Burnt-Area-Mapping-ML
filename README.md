@@ -1,4 +1,4 @@
-# Wildfire Burned Area Mapping using SAR and Machine learning Approach: Random Forest and XGBoost
+# Improved Burned Area Detection Using Dual-Pol Sentinel-1 Data and Machine learning Approach: Random Forest and XGBoost
 
 [Handout](https://github.com/user-attachments/files/20343101/A1_Handout_Twayana.pdf)
 

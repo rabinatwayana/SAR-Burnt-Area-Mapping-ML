@@ -20,6 +20,15 @@ from skimage.morphology import remove_small_objects
 from sklearn.metrics import log_loss, roc_auc_score, roc_curve
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay,classification_report
 from xgboost import XGBClassifier
+from optuna import create_study, Trial
+from optuna.samplers import TPESampler
+import optuna 
+import time
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV, StratifiedKFold, cross_validate, train_test_split, StratifiedShuffleSplit
+from sklearn.metrics import f1_score, make_scorer
+
+default_n_jobs=7
 
 def evaluate_model(y_true, y_pred, average='weighted'):
     """
@@ -596,6 +605,10 @@ def prepare_training_sample(tiles, train_ids, test_ids):
         print("error in preparing training sample: ", str(e))
 
 
+
+
+
+
 # def run_model(feature_image_path,gt_image_path, sample_feature_path, feature_column_names, drop_columns, class_column_name ,models,output_model_dir, output_feat_imp_dir, corr_mat_dir, extended_file_name):
 def run_model(feature_image_path,gt_image_path, feature_column_names,model_name, model,model_param,output_model_dir, output_feat_imp_dir, extended_file_name, train_ids, test_ids, tile_size=100):
     try:
@@ -612,29 +625,30 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
 
         # X_train, X_test, y_train, y_test = prepare_training_sample(sample_feature_path, feature_column_names, class_column_name,drop_columns, corr_mat_dir, model_name, extended_file_name)
         X_train, y_train, X_test, y_test = prepare_training_sample(tiles, train_ids,test_ids)
+        model.fit(X_train, y_train)
 
-        if model_name=="XGB":
-            val_ids=[312,202,209,105,214,300,374,304,292,48]
-            X_val, y_val, _, _ = prepare_training_sample(tiles, val_ids, [])
-            num_negative = np.sum(y_train == 0)
-            num_positive = np.sum(y_train == 1)
-            scale_pos_weight = num_negative / num_positive
+        # if model_name=="XGB":
+        #     val_ids=[312,202,209,105,214,300,374,304,292,48]
+        #     X_val, y_val, _, _ = prepare_training_sample(tiles, val_ids, [])
+        #     num_negative = np.sum(y_train == 0)
+        #     num_positive = np.sum(y_train == 1)
+        #     scale_pos_weight = num_negative / num_positive
 
-            # Update your params
-            model_param['scale_pos_weight'] = scale_pos_weight
+        #     # Update your params
+        #     model_param['scale_pos_weight'] = scale_pos_weight
 
-            # Create model
-            model = XGBClassifier(**model_param)
+        #     # Create model
+        #     model = XGBClassifier(**model_param)
 
-            model.fit(
-                X_train, y_train,
-                eval_set=[(X_val, y_val)],
-                # early_stopping_rounds=10,
-                # verbose=True
-            )
-        else:
+        #     model.fit(
+        #         X_train, y_train,
+        #         eval_set=[(X_val, y_val)],
+        #         # early_stopping_rounds=10,
+        #         # verbose=True
+        #     )
+        # else:
 
-            model.fit(X_train, y_train)
+        #     model.fit(X_train, y_train)
 
         #Make a prediction
         
@@ -929,6 +943,7 @@ def get_best_hyperparameter(random_search_model,feature_image_path,gt_image_path
 
     # feature_image_path="MachineLearning/output/feature_image/palisades_sar_avg_asc_desc.tif"
     # gt_image_path="MachineLearning/gt/palisades_label_0_17.tif"
+
     cv_split = KFold(n_splits=5, random_state=42, shuffle=True)
 
     rf_random_search=RandomizedSearchCV(
@@ -958,3 +973,247 @@ def get_best_hyperparameter(random_search_model,feature_image_path,gt_image_path
 
     # Print the best parameters found
     print(rf_random_search.best_params_)
+
+
+
+def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,tile_size):
+    tiles=create_fish_net(feature_image_path, gt_image_path, tile_size=tile_size,plot_fig=False)
+
+    # train_ids = [154, 351,345,340, 184, 478,355,178,368,88,172,439,303,219,375,435]
+    # train_ids = [146,129,123,344,378,248,132,189,242,297,321,235,356]
+    test_ids=[]
+
+    # X_train, X_test, y_train, y_test = prepare_training_sample(sample_feature_path, feature_column_names, class_column_name,drop_columns, corr_mat_dir, model_name, extended_file_name)
+    X_train, y_train, X_test, y_test = prepare_training_sample(tiles, train_ids,test_ids)
+    # print(X_train.shape,y_train.shape,"hbfhsdvchsdvch")
+
+
+    trial_results = []    # store everything here
+
+    def rf_objective(trial):
+        rf_model = Pipeline([
+            # ('preprocess', preprocess),
+            ('rf', RandomForestClassifier(
+                random_state=42,
+                n_jobs=default_n_jobs,
+                n_estimators=100
+            ))
+        ])
+
+        params = {
+            # "rf__n_estimators": trial.suggest_categorical("n_estimators", [100, 150, 200, 250, 300]),
+            "rf__max_depth": trial.suggest_int("max_depth", 8, 20),
+            "rf__min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 6),
+            "rf__min_samples_split": trial.suggest_int("min_samples_split", 2, 20),
+            "rf__max_features": trial.suggest_float("max_features", 0.5, 0.9),
+            "rf__class_weight": trial.suggest_categorical("class_weight", [None, "balanced","balanced_subsample"]),
+        }
+
+        rf_model.set_params(**params)
+
+        # cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        cv = StratifiedShuffleSplit(
+            n_splits=1,
+            test_size=0.2,
+            random_state=42
+        )
+
+
+        cv_scores = cross_validate(
+            rf_model,
+            X_train, 
+            y_train,
+            cv=cv,
+            # scoring="f1_score",
+            scoring=make_scorer(f1_score, pos_label=1),
+            # pos_label=1,
+            return_train_score=True,
+            n_jobs=default_n_jobs
+        )
+        # "f1_burned": make_scorer(f1_score, pos_label=1)
+
+        train_mean = cv_scores["train_score"].mean()
+        train_std  = cv_scores["train_score"].std()
+
+        test_mean  = cv_scores["test_score"].mean()
+        test_std   = cv_scores["test_score"].std()
+
+        # Save results for later plotting
+        trial_results.append({
+            "trial_number": trial.number,
+            "train_f1_score_mean": train_mean,
+            "train_f1_score_std": train_std,
+            "val_f1_score_mean": test_mean,
+            "val_f1_score_std": test_std,
+            "params": params
+        })
+        # Optuna maximizes test_mean
+        return round(test_mean, 5)
+    
+    # from sklearn.model_selection import StratifiedShuffleSplit
+    # from sklearn.metrics import f1_score
+    # import numpy as np
+
+    def xgb_objective(trial):
+
+        params = {
+            "max_depth": trial.suggest_int("max_depth", 5, 20),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+            "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+            "gamma": trial.suggest_float("gamma", 0.0, 5.0),
+            "reg_alpha": trial.suggest_float("reg_alpha", 0.0, 5.0),
+            "reg_lambda": trial.suggest_float("reg_lambda", 0.0, 5.0),
+        }
+
+        cv = StratifiedShuffleSplit(
+            n_splits=1,     # keep 1 for speed, increase later if needed
+            test_size=0.2,
+            random_state=42
+        )
+
+        val_scores = []
+        train_scores = []
+
+        for train_idx, val_idx in cv.split(X_train, y_train):
+
+            X_tr, X_val = X_train[train_idx], X_train[val_idx]
+            y_tr, y_val = y_train[train_idx], y_train[val_idx]
+
+            model = XGBClassifier(
+                n_estimators=1000,
+                objective="binary:logistic",
+                eval_metric="logloss",
+                random_state=42,
+                n_jobs=default_n_jobs,
+                tree_method="hist",
+                early_stopping_rounds=10,
+                verbosity=0,
+                **params
+            )
+
+            model.fit(
+                X_tr,
+                y_tr,
+                eval_set=[(X_val, y_val)],
+                verbose=False
+            )
+
+            # Predictions
+            y_tr_pred  = model.predict(X_tr)
+            y_val_pred = model.predict(X_val)
+
+            train_scores.append(f1_score(y_tr, y_tr_pred, pos_label=1))
+            val_scores.append(f1_score(y_val, y_val_pred, pos_label=1))
+
+        train_mean = np.mean(train_scores)
+        train_std  = np.std(train_scores)
+        val_mean   = np.mean(val_scores)
+        val_std    = np.std(val_scores)
+
+        trial_results.append({
+            "trial_number": trial.number,
+            "train_f1_score_mean": train_mean,
+            "train_f1_score_std": train_std,
+            "val_f1_score_mean": val_mean,
+            "val_f1_score_std": val_std,
+            "best_iteration": model.best_iteration,
+            "params": params
+        })
+
+        return round(val_mean, 5)
+
+    # def xgb_objective(trial):
+
+    #     xgb_model = Pipeline([
+    #         ('xgb', XGBClassifier(
+    #             n_estimators=1000,
+    #             objective="binary:logistic",
+    #             eval_metric="logloss",
+    #             random_state=42,
+    #             n_jobs=default_n_jobs,
+    #             tree_method="hist",      # faster & memory efficient
+    #             verbosity=0,
+    #             early_stopping_rounds= 10,  
+    #         ))
+    #     ])
+
+    #     params = {
+    #         # "xgb__n_estimators": trial.suggest_categorical("n_estimators", [100, 150, 200, 250, 300]),
+    #         "xgb__max_depth": trial.suggest_int("max_depth", 5, 20),
+    #         "xgb__learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
+    #         "xgb__subsample": trial.suggest_float("subsample", 0.6, 1.0),
+    #         "xgb__colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+    #         "xgb__min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+    #         "xgb__gamma": trial.suggest_float("gamma", 0.0, 5.0),
+    #         "xgb__reg_alpha": trial.suggest_float("reg_alpha", 0.0, 5.0),
+    #         "xgb__reg_lambda": trial.suggest_float("reg_lambda", 0.0, 5.0),
+    #     }
+
+    #     xgb_model.set_params(**params)
+
+    #     # cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+    #     cv = StratifiedShuffleSplit(
+    #         n_splits=1,
+    #         test_size=0.2,
+    #         random_state=42
+    #     )
+
+
+
+    #     cv_scores = cross_validate(
+    #         xgb_model,
+    #         X_train,
+    #         y_train,
+    #         cv=cv,
+    #         scoring=make_scorer(f1_score, pos_label=1),
+    #         return_train_score=True,
+    #         n_jobs=default_n_jobs
+    #     )
+
+    #     train_mean = cv_scores["train_score"].mean()
+    #     train_std  = cv_scores["train_score"].std()
+    #     test_mean  = cv_scores["test_score"].mean()
+    #     test_std   = cv_scores["test_score"].std()
+
+    #     trial_results.append({
+    #         "trial_number": trial.number,
+    #         "train_f1_score_mean": train_mean,
+    #         "train_f1_score_std": train_std,
+    #         "val_f1_score_mean": test_mean,
+    #         "val_f1_score_std": test_std,
+    #         "params": params
+    #     })
+    #     return round(test_mean, 5)
+    
+    if model=="RF":
+        start_time = time.perf_counter()
+        rf_study = optuna.create_study(direction="maximize",sampler=optuna.samplers.TPESampler(seed=42))
+        rf_study.optimize(rf_objective, n_trials=15) #new try: 25
+        end_time = time.perf_counter()
+        print(trial_results)
+        print(f"RF parameter tuning using optuna completed in {(end_time-start_time)/60:.2f} minutes")
+        print("Best Score:", rf_study.best_value)
+        print("Best Params:", rf_study.best_params)
+
+    if model=="XGBoost":
+        start_time = time.perf_counter()
+        xgb_study = optuna.create_study(direction="maximize",sampler=optuna.samplers.TPESampler(seed=42))
+        xgb_study.optimize(xgb_objective, n_trials=15) #new try: 25
+        end_time = time.perf_counter()
+        print(trial_results)
+        print(f"XGBoost parameter tuning using optuna completed in {(end_time-start_time)/60:.2f} minutes")
+        print("Best Score:", xgb_study.best_value)
+        print("Best Params:", xgb_study.best_params)
+
+    # # save the best model
+    # best_rf = RandomForestClassifier(
+    #     **study.best_params,
+    #     random_state=42,
+    #     n_jobs=default_n_jobs
+    # )
+    # best_rf.fit(X_train, y_train)
+
+    # joblib.dump(best_rf, model_save_path)
+

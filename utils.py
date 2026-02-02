@@ -625,29 +625,30 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
 
         # X_train, X_test, y_train, y_test = prepare_training_sample(sample_feature_path, feature_column_names, class_column_name,drop_columns, corr_mat_dir, model_name, extended_file_name)
         X_train, y_train, X_test, y_test = prepare_training_sample(tiles, train_ids,test_ids)
+        model.fit(X_train, y_train)
 
-        if model_name=="XGB":
-            val_ids=[312,202,209,105,214,300,374,304,292,48]
-            X_val, y_val, _, _ = prepare_training_sample(tiles, val_ids, [])
-            num_negative = np.sum(y_train == 0)
-            num_positive = np.sum(y_train == 1)
-            scale_pos_weight = num_negative / num_positive
+        # if model_name=="XGB":
+        #     val_ids=[312,202,209,105,214,300,374,304,292,48]
+        #     X_val, y_val, _, _ = prepare_training_sample(tiles, val_ids, [])
+        #     num_negative = np.sum(y_train == 0)
+        #     num_positive = np.sum(y_train == 1)
+        #     scale_pos_weight = num_negative / num_positive
 
-            # Update your params
-            model_param['scale_pos_weight'] = scale_pos_weight
+        #     # Update your params
+        #     model_param['scale_pos_weight'] = scale_pos_weight
 
-            # Create model
-            model = XGBClassifier(**model_param)
+        #     # Create model
+        #     model = XGBClassifier(**model_param)
 
-            model.fit(
-                X_train, y_train,
-                eval_set=[(X_val, y_val)],
-                # early_stopping_rounds=10,
-                # verbose=True
-            )
-        else:
+        #     model.fit(
+        #         X_train, y_train,
+        #         eval_set=[(X_val, y_val)],
+        #         # early_stopping_rounds=10,
+        #         # verbose=True
+        #     )
+        # else:
 
-            model.fit(X_train, y_train)
+        #     model.fit(X_train, y_train)
 
         #Make a prediction
         
@@ -1049,66 +1050,142 @@ def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,til
         # Optuna maximizes test_mean
         return round(test_mean, 5)
     
+    # from sklearn.model_selection import StratifiedShuffleSplit
+    # from sklearn.metrics import f1_score
+    # import numpy as np
+
     def xgb_objective(trial):
 
-        xgb_model = Pipeline([
-            ('xgb', XGBClassifier(
+        params = {
+            "max_depth": trial.suggest_int("max_depth", 5, 20),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+            "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+            "gamma": trial.suggest_float("gamma", 0.0, 5.0),
+            "reg_alpha": trial.suggest_float("reg_alpha", 0.0, 5.0),
+            "reg_lambda": trial.suggest_float("reg_lambda", 0.0, 5.0),
+        }
+
+        cv = StratifiedShuffleSplit(
+            n_splits=1,     # keep 1 for speed, increase later if needed
+            test_size=0.2,
+            random_state=42
+        )
+
+        val_scores = []
+        train_scores = []
+
+        for train_idx, val_idx in cv.split(X_train, y_train):
+
+            X_tr, X_val = X_train[train_idx], X_train[val_idx]
+            y_tr, y_val = y_train[train_idx], y_train[val_idx]
+
+            model = XGBClassifier(
                 n_estimators=1000,
                 objective="binary:logistic",
                 eval_metric="logloss",
                 random_state=42,
                 n_jobs=default_n_jobs,
-                tree_method="hist",      # faster & memory efficient
+                tree_method="hist",
+                early_stopping_rounds=10,
                 verbosity=0,
-                early_stopping_rounds= 10,  
-            ))
-        ])
+                **params
+            )
 
-        params = {
-            # "xgb__n_estimators": trial.suggest_categorical("n_estimators", [100, 150, 200, 250, 300]),
-            "xgb__max_depth": trial.suggest_int("max_depth", 5, 20),
-            "xgb__learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
-            "xgb__subsample": trial.suggest_float("subsample", 0.6, 1.0),
-            "xgb__colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
-            "xgb__min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
-            "xgb__gamma": trial.suggest_float("gamma", 0.0, 5.0),
-            "xgb__reg_alpha": trial.suggest_float("reg_alpha", 0.0, 5.0),
-            "xgb__reg_lambda": trial.suggest_float("reg_lambda", 0.0, 5.0),
-        }
+            model.fit(
+                X_tr,
+                y_tr,
+                eval_set=[(X_val, y_val)],
+                verbose=False
+            )
 
-        xgb_model.set_params(**params)
+            # Predictions
+            y_tr_pred  = model.predict(X_tr)
+            y_val_pred = model.predict(X_val)
 
-        # cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-        cv = StratifiedShuffleSplit(
-            n_splits=1,
-            test_size=0.2,
-            random_state=42
-        )
+            train_scores.append(f1_score(y_tr, y_tr_pred, pos_label=1))
+            val_scores.append(f1_score(y_val, y_val_pred, pos_label=1))
 
-        cv_scores = cross_validate(
-            xgb_model,
-            X_train,
-            y_train,
-            cv=cv,
-            scoring=make_scorer(f1_score, pos_label=1),
-            return_train_score=True,
-            n_jobs=default_n_jobs
-        )
-
-        train_mean = cv_scores["train_score"].mean()
-        train_std  = cv_scores["train_score"].std()
-        test_mean  = cv_scores["test_score"].mean()
-        test_std   = cv_scores["test_score"].std()
+        train_mean = np.mean(train_scores)
+        train_std  = np.std(train_scores)
+        val_mean   = np.mean(val_scores)
+        val_std    = np.std(val_scores)
 
         trial_results.append({
             "trial_number": trial.number,
             "train_f1_score_mean": train_mean,
             "train_f1_score_std": train_std,
-            "val_f1_score_mean": test_mean,
-            "val_f1_score_std": test_std,
+            "val_f1_score_mean": val_mean,
+            "val_f1_score_std": val_std,
+            "best_iteration": model.best_iteration,
             "params": params
         })
-        return round(test_mean, 5)
+
+        return round(val_mean, 5)
+
+    # def xgb_objective(trial):
+
+    #     xgb_model = Pipeline([
+    #         ('xgb', XGBClassifier(
+    #             n_estimators=1000,
+    #             objective="binary:logistic",
+    #             eval_metric="logloss",
+    #             random_state=42,
+    #             n_jobs=default_n_jobs,
+    #             tree_method="hist",      # faster & memory efficient
+    #             verbosity=0,
+    #             early_stopping_rounds= 10,  
+    #         ))
+    #     ])
+
+    #     params = {
+    #         # "xgb__n_estimators": trial.suggest_categorical("n_estimators", [100, 150, 200, 250, 300]),
+    #         "xgb__max_depth": trial.suggest_int("max_depth", 5, 20),
+    #         "xgb__learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
+    #         "xgb__subsample": trial.suggest_float("subsample", 0.6, 1.0),
+    #         "xgb__colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+    #         "xgb__min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+    #         "xgb__gamma": trial.suggest_float("gamma", 0.0, 5.0),
+    #         "xgb__reg_alpha": trial.suggest_float("reg_alpha", 0.0, 5.0),
+    #         "xgb__reg_lambda": trial.suggest_float("reg_lambda", 0.0, 5.0),
+    #     }
+
+    #     xgb_model.set_params(**params)
+
+    #     # cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+    #     cv = StratifiedShuffleSplit(
+    #         n_splits=1,
+    #         test_size=0.2,
+    #         random_state=42
+    #     )
+
+
+
+    #     cv_scores = cross_validate(
+    #         xgb_model,
+    #         X_train,
+    #         y_train,
+    #         cv=cv,
+    #         scoring=make_scorer(f1_score, pos_label=1),
+    #         return_train_score=True,
+    #         n_jobs=default_n_jobs
+    #     )
+
+    #     train_mean = cv_scores["train_score"].mean()
+    #     train_std  = cv_scores["train_score"].std()
+    #     test_mean  = cv_scores["test_score"].mean()
+    #     test_std   = cv_scores["test_score"].std()
+
+    #     trial_results.append({
+    #         "trial_number": trial.number,
+    #         "train_f1_score_mean": train_mean,
+    #         "train_f1_score_std": train_std,
+    #         "val_f1_score_mean": test_mean,
+    #         "val_f1_score_std": test_std,
+    #         "params": params
+    #     })
+    #     return round(test_mean, 5)
     
     if model=="RF":
         start_time = time.perf_counter()

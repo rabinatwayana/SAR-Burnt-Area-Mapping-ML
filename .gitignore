@@ -12,3 +12,4 @@ backup/
 __pycache__
 __pycache__/
 MachineLearning/pre_processed_data/*
+backup_before_second_publish

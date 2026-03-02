@@ -30,7 +30,7 @@ from sklearn.metrics import f1_score, make_scorer
 
 default_n_jobs=7
 
-def evaluate_model(y_true, y_pred, average='weighted'):
+def evaluate_model(y_true, y_pred):
     """
     Compute and return classification evaluation metrics.
     
@@ -47,11 +47,16 @@ def evaluate_model(y_true, y_pred, average='weighted'):
     metrics = {
         "log_loss": log_loss(y_true, y_pred),
         'accuracy': accuracy_score(y_true, y_pred),
-        'f1_score': f1_score(y_true, y_pred, average=average),
-        'precision': precision_score(y_true, y_pred, average=average, zero_division=0),
-        'recall': recall_score(y_true, y_pred, average=average),
-        # 'roc_auc': roc_auc_score(y_true, y_pred, multi_class='ovr') if len(set(y_true)) > 2 else roc_auc_score(y_true, y_pred)
+        'f1_score': f1_score(y_true, y_pred, average="macro"),
+        'precision': precision_score(y_true, y_pred, average="macro", zero_division=0),
+        'recall': recall_score(y_true, y_pred, average="macro"),
+
+        'f1_score_binary': f1_score(y_true, y_pred, average="binary"),
+        'precision_binary': precision_score(y_true, y_pred, average="binary", zero_division=0),
+        'recall_binary': recall_score(y_true, y_pred, average="binary"),
+
         'roc_auc': roc_auc_score(y_true, y_pred),
+
          "confusion_matrix": cm
     }
     
@@ -67,7 +72,10 @@ def evaluate_model(y_true, y_pred, average='weighted'):
     print(f"- Accuracy: {metrics['accuracy']}")
     print(f"- F1 Score: {metrics['f1_score']}")
     print(f"- Precision Score: {metrics['precision']}")
-    print(f"- Recall Score: {metrics['accuracy']}")
+    print(f"- Recall Score: {metrics['recall']}")
+    print(f"- F1 Score Binary: {metrics['f1_score_binary']}")
+    print(f"- Precision Score Binary: {metrics['precision_binary']}")
+    print(f"- Recall Score Binary: {metrics['recall_binary']}")
     print(f"- Roc Auc Score: {metrics['roc_auc']}")
     print(f"- confusion_matrix: {metrics['confusion_matrix']}")
 
@@ -219,6 +227,9 @@ def generate_gt(dnbr_file_path, output_gt_path):
         # Apply Otsu's thresholding method to find the optimal threshold
         threshold = threshold_otsu(dNBR_data)
         print(f"Optimal threshold based on Otsu's method: {threshold}")
+
+        # threshold=0.27
+        # print(f"Using threshold: {threshold} to classify burnt vs non-burnt areas.")
 
         # Classify the dNBR image using the threshold (Burnt vs Non-burnt)
         classified_image = dNBR_data > threshold
@@ -605,53 +616,16 @@ def prepare_training_sample(tiles, train_ids, test_ids):
         print("error in preparing training sample: ", str(e))
 
 
-
-
-
-
 # def run_model(feature_image_path,gt_image_path, sample_feature_path, feature_column_names, drop_columns, class_column_name ,models,output_model_dir, output_feat_imp_dir, corr_mat_dir, extended_file_name):
-def run_model(feature_image_path,gt_image_path, feature_column_names,model_name, model,model_param,output_model_dir, output_feat_imp_dir, extended_file_name, train_ids, test_ids, tile_size=100):
+def run_model(feature_image_path,gt_image_path, feature_column_names,model_name, model,output_model_dir, output_feat_imp_dir, extended_file_name, train_ids, test_ids, tile_size=100):
     try:
-        # metrics_combined=[]
-        # for i in range(len(list(models))):
-        # model_name=list(models.keys())[i]
         print(f"***************{model_name}*********************")
-        # model=list(models.values())[i]
         tiles=create_fish_net(feature_image_path, gt_image_path, tile_size=tile_size,plot_fig=False)
-
-        # train_ids = [1,3,5,7,9,15,17,20,21,23,27,29,30,32,33,34,36,40,41,42,43,44,45,46,47,48,53,57,58,59,60,61,62,67,68,70,71,73,74,75]
-        # val_ids = []
-        # test_ids = [4,10,19,22,31,35,55,56,69,72]
 
         # X_train, X_test, y_train, y_test = prepare_training_sample(sample_feature_path, feature_column_names, class_column_name,drop_columns, corr_mat_dir, model_name, extended_file_name)
         X_train, y_train, X_test, y_test = prepare_training_sample(tiles, train_ids,test_ids)
         model.fit(X_train, y_train)
 
-        # if model_name=="XGB":
-        #     val_ids=[312,202,209,105,214,300,374,304,292,48]
-        #     X_val, y_val, _, _ = prepare_training_sample(tiles, val_ids, [])
-        #     num_negative = np.sum(y_train == 0)
-        #     num_positive = np.sum(y_train == 1)
-        #     scale_pos_weight = num_negative / num_positive
-
-        #     # Update your params
-        #     model_param['scale_pos_weight'] = scale_pos_weight
-
-        #     # Create model
-        #     model = XGBClassifier(**model_param)
-
-        #     model.fit(
-        #         X_train, y_train,
-        #         eval_set=[(X_val, y_val)],
-        #         # early_stopping_rounds=10,
-        #         # verbose=True
-        #     )
-        # else:
-
-        #     model.fit(X_train, y_train)
-
-        #Make a prediction
-        
         if train_ids:
             y_train_pred=model.predict(X_train)
             print('Model performance for Training set smooth')
@@ -663,8 +637,6 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
 
         if test_ids:
             y_test_pred=model.predict(X_test)
-            # print('Model performance for Test set')
-            # metrics_test=evaluate_model(y_test,y_test_pred)
 
             print("--------------")
             print('Model performance for Test set smooth')
@@ -673,11 +645,6 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
             y_test_pred_processed = (smoothed_pred > 0.5).astype(int)
             metrics_test=evaluate_model(y_test,y_test_pred_processed)
             print("----------------------------------------")
-        # if val_ids:
-        #     y_val_pred=model.predict(X_val)
-        #     print('Model performance for Val set')
-        #     metrics_test=evaluate_model(y_val,y_val_pred)
-        #     print("----------------------------------------")
 
  
         metrics={
@@ -686,6 +653,9 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
         'f1_train': round(metrics_train['f1_score'],4),
         'precision_train': round(metrics_train['precision'],4),
         'recall_train': round(metrics_train['recall'],4),
+        'f1_train_binary': round(metrics_train['f1_score_binary'],4),
+        'precision_train_binary': round(metrics_train['precision_binary'],4),
+        'recall_train_binary': round(metrics_train['recall_binary'],4),
         'roc_auc_train': round(metrics_train['roc_auc'],4),
         'log_loss_test': round(metrics_test['log_loss'],4), 
 
@@ -693,6 +663,9 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
         'f1_test': round(metrics_test['f1_score'],4),
         'precision_test': round(metrics_test['precision'],4),
         'recall_test': round(metrics_test['recall'],4),
+        'f1_test_binary': round(metrics_test['f1_score_binary'],4),
+        'precision_test_binary': round(metrics_test['precision_binary'],4),
+        'recall_test_binary': round(metrics_test['recall_binary'],4),
         'roc_auc_test': round(metrics_test['roc_auc'],4),
         'cm_train': metrics_train['confusion_matrix'],
         'cm_test': metrics_test['confusion_matrix'],
@@ -735,18 +708,7 @@ def predict(model, image_path, output_file_path,output_image_path,title,show_leg
     print(np.unique(predictions))
 
     # Assuming predictions are a 2D array (for an image or spatial data)
-    predictions = uniform_filter(predictions, size=4)  # size is the window size
-
-    # predictions = model.predict(scaler.transform(pixels))
-    # Binary classification: make sure values are 0 and 1
-    # binary_prediction = (predictions > 0.5).astype(int)  # You may adjust threshold
-
-    # # 🧹 Remove small objects (<100 pixels)
-    # cleaned_prediction = remove_small_objects(binary_prediction.astype(bool), min_size=10)
-
-    # # Convert back to integer image
-    # predictions = cleaned_prediction.astype(np.uint8)
-
+    predictions = uniform_filter(predictions, size=2)  # size is the window size
 
     # Reshape predictions to match the image dimensions
     predicted_image = predictions.reshape(height, width)
@@ -974,19 +936,29 @@ def get_best_hyperparameter(random_search_model,feature_image_path,gt_image_path
     # Print the best parameters found
     print(rf_random_search.best_params_)
 
+from sklearn.model_selection import GroupKFold
+
+def tiles_to_samples_with_groups(tile_list):
+    X_list = []
+    y_list = []
+    group_list = []
+    for idx, (feat_patch, label_patch) in enumerate(tile_list):
+        num_bands, h, w = feat_patch.shape
+        X = feat_patch.reshape(num_bands, -1).T  # (H*W, bands)
+        y = label_patch.flatten()               # (H*W,)
+        groups = np.full_like(y, idx)           # all pixels in this tile belong to group idx
+        X_list.append(X)
+        y_list.append(y)
+        group_list.append(groups)
+    return np.vstack(X_list), np.hstack(y_list), np.hstack(group_list)
 
 
-def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,tile_size):
+def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,tile_size, n_splits=3):
+    print("cpu_cores" , default_n_jobs)
     tiles=create_fish_net(feature_image_path, gt_image_path, tile_size=tile_size,plot_fig=False)
-
-    # train_ids = [154, 351,345,340, 184, 478,355,178,368,88,172,439,303,219,375,435]
-    # train_ids = [146,129,123,344,378,248,132,189,242,297,321,235,356]
-    test_ids=[]
-
-    # X_train, X_test, y_train, y_test = prepare_training_sample(sample_feature_path, feature_column_names, class_column_name,drop_columns, corr_mat_dir, model_name, extended_file_name)
-    X_train, y_train, X_test, y_test = prepare_training_sample(tiles, train_ids,test_ids)
-    # print(X_train.shape,y_train.shape,"hbfhsdvchsdvch")
-
+    print("Using GroupKFold with split ", n_splits)
+    # test_ids=[]
+    # X_train, y_train, X_test, y_test = prepare_training_sample(tiles, train_ids, test_ids)
 
     trial_results = []    # store everything here
 
@@ -1006,31 +978,48 @@ def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,til
             "rf__min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 6),
             "rf__min_samples_split": trial.suggest_int("min_samples_split", 2, 20),
             "rf__max_features": trial.suggest_float("max_features", 0.5, 0.9),
-            "rf__class_weight": trial.suggest_categorical("class_weight", [None, "balanced","balanced_subsample"]),
+            "rf__class_weight": trial.suggest_categorical("class_weight", ["balanced","balanced_subsample"]),
         }
 
         rf_model.set_params(**params)
 
         # cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-        cv = StratifiedShuffleSplit(
-            n_splits=1,
-            test_size=0.2,
-            random_state=42
-        )
+        train_tiles = [tiles[i][1:] for i in train_ids]
+        X_train, y_train, groups_train = tiles_to_samples_with_groups(train_tiles)
 
+        
+        cv = GroupKFold(n_splits=n_splits)
 
         cv_scores = cross_validate(
             rf_model,
-            X_train, 
+            X_train,
             y_train,
+            groups=groups_train,
             cv=cv,
-            # scoring="f1_score",
-            scoring=make_scorer(f1_score, pos_label=1),
-            # pos_label=1,
+            scoring=make_scorer(f1_score, average="macro"),
             return_train_score=True,
             n_jobs=default_n_jobs
         )
-        # "f1_burned": make_scorer(f1_score, pos_label=1)
+        
+        # cv = StratifiedShuffleSplit(
+        #     n_splits=3,
+        #     test_size=0.2,
+        #     random_state=42
+        # )
+
+
+        # cv_scores = cross_validate(
+        #     rf_model,
+        #     X_train, 
+        #     y_train,
+        #     cv=cv,
+        #     # scoring="f1_score",
+        #     scoring=make_scorer(f1_score, pos_label=1),
+        #     # pos_label=1,
+        #     return_train_score=True,
+        #     n_jobs=default_n_jobs
+        # )
+        # # "f1_burned": make_scorer(f1_score, pos_label=1)
 
         train_mean = cv_scores["train_score"].mean()
         train_std  = cv_scores["train_score"].std()
@@ -1041,19 +1030,15 @@ def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,til
         # Save results for later plotting
         trial_results.append({
             "trial_number": trial.number,
-            "train_f1_score_mean": train_mean,
-            "train_f1_score_std": train_std,
-            "val_f1_score_mean": test_mean,
-            "val_f1_score_std": test_std,
+            "train_f1_score_mean": round(train_mean, 6),
+            "train_f1_score_std": round(train_std, 6),
+            "val_f1_score_mean": round(test_mean, 6),
+            "val_f1_score_std": round(test_std, 6),
             "params": params
         })
         # Optuna maximizes test_mean
         return round(test_mean, 5)
     
-    # from sklearn.model_selection import StratifiedShuffleSplit
-    # from sklearn.metrics import f1_score
-    # import numpy as np
-
     def xgb_objective(trial):
 
         params = {
@@ -1066,17 +1051,25 @@ def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,til
             "reg_alpha": trial.suggest_float("reg_alpha", 0.0, 5.0),
             "reg_lambda": trial.suggest_float("reg_lambda", 0.0, 5.0),
         }
-
-        cv = StratifiedShuffleSplit(
-            n_splits=1,     # keep 1 for speed, increase later if needed
-            test_size=0.2,
-            random_state=42
-        )
+        print("Using 3 n-splits")
+        # cv = StratifiedShuffleSplit(
+        #     n_splits=3,     # keep 1 for speed, increase later if needed
+        #     test_size=0.2,
+        #     random_state=42
+        # )
 
         val_scores = []
         train_scores = []
 
-        for train_idx, val_idx in cv.split(X_train, y_train):
+
+        train_tiles = [tiles[i][1:] for i in train_ids]
+        X_train, y_train, groups_train = tiles_to_samples_with_groups(train_tiles)
+
+        gkf = GroupKFold(n_splits=n_splits)
+
+        # X_train, y_train, groups, gkf = prepare_groupcv_samples(tiles, train_ids, n_splits=3)
+        for train_idx, val_idx in gkf.split(X_train, y_train, groups=groups_train):
+        # for train_idx, val_idx in cv.split(X_train, y_train):
 
             X_tr, X_val = X_train[train_idx], X_train[val_idx]
             y_tr, y_val = y_train[train_idx], y_train[val_idx]
@@ -1104,116 +1097,54 @@ def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,til
             y_tr_pred  = model.predict(X_tr)
             y_val_pred = model.predict(X_val)
 
-            train_scores.append(f1_score(y_tr, y_tr_pred, pos_label=1))
-            val_scores.append(f1_score(y_val, y_val_pred, pos_label=1))
+            train_scores.append(f1_score(y_tr, y_tr_pred, average="macro"))
+            val_scores.append(f1_score(y_val, y_val_pred, average="macro"))
 
         train_mean = np.mean(train_scores)
         train_std  = np.std(train_scores)
         val_mean   = np.mean(val_scores)
         val_std    = np.std(val_scores)
 
+        # trial_results.append({
+        #     "trial_number": trial.number,
+        #     "train_f1_score_mean": train_mean,
+        #     "train_f1_score_std": train_std,
+        #     "val_f1_score_mean": val_mean,
+        #     "val_f1_score_std": val_std,
+        #     "best_iteration": model.best_iteration,
+        #     "params": params
+        # })
         trial_results.append({
             "trial_number": trial.number,
-            "train_f1_score_mean": train_mean,
-            "train_f1_score_std": train_std,
-            "val_f1_score_mean": val_mean,
-            "val_f1_score_std": val_std,
+            "train_f1_score_mean": round(train_mean, 6),
+            "train_f1_score_std": round(train_std, 6),
+            "val_f1_score_mean": round(val_mean, 6),
+            "val_f1_score_std": round(val_std, 6),
             "best_iteration": model.best_iteration,
             "params": params
         })
 
         return round(val_mean, 5)
-
-    # def xgb_objective(trial):
-
-    #     xgb_model = Pipeline([
-    #         ('xgb', XGBClassifier(
-    #             n_estimators=1000,
-    #             objective="binary:logistic",
-    #             eval_metric="logloss",
-    #             random_state=42,
-    #             n_jobs=default_n_jobs,
-    #             tree_method="hist",      # faster & memory efficient
-    #             verbosity=0,
-    #             early_stopping_rounds= 10,  
-    #         ))
-    #     ])
-
-    #     params = {
-    #         # "xgb__n_estimators": trial.suggest_categorical("n_estimators", [100, 150, 200, 250, 300]),
-    #         "xgb__max_depth": trial.suggest_int("max_depth", 5, 20),
-    #         "xgb__learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
-    #         "xgb__subsample": trial.suggest_float("subsample", 0.6, 1.0),
-    #         "xgb__colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
-    #         "xgb__min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
-    #         "xgb__gamma": trial.suggest_float("gamma", 0.0, 5.0),
-    #         "xgb__reg_alpha": trial.suggest_float("reg_alpha", 0.0, 5.0),
-    #         "xgb__reg_lambda": trial.suggest_float("reg_lambda", 0.0, 5.0),
-    #     }
-
-    #     xgb_model.set_params(**params)
-
-    #     # cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-    #     cv = StratifiedShuffleSplit(
-    #         n_splits=1,
-    #         test_size=0.2,
-    #         random_state=42
-    #     )
-
-
-
-    #     cv_scores = cross_validate(
-    #         xgb_model,
-    #         X_train,
-    #         y_train,
-    #         cv=cv,
-    #         scoring=make_scorer(f1_score, pos_label=1),
-    #         return_train_score=True,
-    #         n_jobs=default_n_jobs
-    #     )
-
-    #     train_mean = cv_scores["train_score"].mean()
-    #     train_std  = cv_scores["train_score"].std()
-    #     test_mean  = cv_scores["test_score"].mean()
-    #     test_std   = cv_scores["test_score"].std()
-
-    #     trial_results.append({
-    #         "trial_number": trial.number,
-    #         "train_f1_score_mean": train_mean,
-    #         "train_f1_score_std": train_std,
-    #         "val_f1_score_mean": test_mean,
-    #         "val_f1_score_std": test_std,
-    #         "params": params
-    #     })
-    #     return round(test_mean, 5)
-    
-    if model=="RF":
+    print("Using 10 n-trials for optuna parameter tuning")
+    if model=="RandomForest":
         start_time = time.perf_counter()
         rf_study = optuna.create_study(direction="maximize",sampler=optuna.samplers.TPESampler(seed=42))
-        rf_study.optimize(rf_objective, n_trials=15) #new try: 25
+        rf_study.optimize(rf_objective, n_trials=10) #new try: 25
         end_time = time.perf_counter()
         print(trial_results)
         print(f"RF parameter tuning using optuna completed in {(end_time-start_time)/60:.2f} minutes")
         print("Best Score:", rf_study.best_value)
         print("Best Params:", rf_study.best_params)
+        return rf_study.best_params
 
     if model=="XGBoost":
         start_time = time.perf_counter()
         xgb_study = optuna.create_study(direction="maximize",sampler=optuna.samplers.TPESampler(seed=42))
-        xgb_study.optimize(xgb_objective, n_trials=15) #new try: 25
+        xgb_study.optimize(xgb_objective, n_trials=10) #new try: 25
         end_time = time.perf_counter()
         print(trial_results)
         print(f"XGBoost parameter tuning using optuna completed in {(end_time-start_time)/60:.2f} minutes")
         print("Best Score:", xgb_study.best_value)
         print("Best Params:", xgb_study.best_params)
-
-    # # save the best model
-    # best_rf = RandomForestClassifier(
-    #     **study.best_params,
-    #     random_state=42,
-    #     n_jobs=default_n_jobs
-    # )
-    # best_rf.fit(X_train, y_train)
-
-    # joblib.dump(best_rf, model_save_path)
+        return xgb_study.best_params
 

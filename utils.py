@@ -30,7 +30,7 @@ from sklearn.metrics import f1_score, make_scorer
 
 default_n_jobs=7
 
-def evaluate_model(y_true, y_pred):
+def evaluate_model(y_true, y_pred,y_proba):
     """
     Compute and return classification evaluation metrics.
     
@@ -50,12 +50,20 @@ def evaluate_model(y_true, y_pred):
         'f1_score': f1_score(y_true, y_pred, average="macro"),
         'precision': precision_score(y_true, y_pred, average="macro", zero_division=0),
         'recall': recall_score(y_true, y_pred, average="macro"),
+        'roc_auc': roc_auc_score(y_true, y_proba, multi_class="ovr", average="macro"),
 
         'f1_score_binary': f1_score(y_true, y_pred, average="binary"),
         'precision_binary': precision_score(y_true, y_pred, average="binary", zero_division=0),
         'recall_binary': recall_score(y_true, y_pred, average="binary"),
+        'roc_auc_binary': roc_auc_score(y_true, y_proba),
 
-        'roc_auc': roc_auc_score(y_true, y_pred),
+        # y_proba = model.predict_proba(X_test)[:, 1]
+
+        # 'roc_auc_binary': roc_auc_score(y_true, y_proba)
+
+
+        # y_proba = model.predict_proba(X_test)
+
 
          "confusion_matrix": cm
     }
@@ -73,10 +81,11 @@ def evaluate_model(y_true, y_pred):
     print(f"- F1 Score: {metrics['f1_score']}")
     print(f"- Precision Score: {metrics['precision']}")
     print(f"- Recall Score: {metrics['recall']}")
+    print(f"- Roc Auc Score: {metrics['roc_auc']}")
     print(f"- F1 Score Binary: {metrics['f1_score_binary']}")
     print(f"- Precision Score Binary: {metrics['precision_binary']}")
     print(f"- Recall Score Binary: {metrics['recall_binary']}")
-    print(f"- Roc Auc Score: {metrics['roc_auc']}")
+    print(f"- Roc Auc Score Binary: {metrics['roc_auc_binary']}")
     print(f"- confusion_matrix: {metrics['confusion_matrix']}")
 
     return metrics
@@ -633,7 +642,13 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
             # Convert back to 0/1
             y_train_pred_processed = (smoothed_pred > 0.5).astype(int)
 
-            metrics_train=evaluate_model(y_train,y_train_pred_processed)
+            # Get probabilities
+            y_train_proba = model.predict_proba(X_train)[:, 1]
+
+            # Smooth probabilities
+            smoothed_proba = uniform_filter(y_train_proba.astype(float), size=5)
+
+            metrics_train=evaluate_model(y_train,y_train_pred_processed,smoothed_proba)
 
         if test_ids:
             y_test_pred=model.predict(X_test)
@@ -643,7 +658,14 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
             smoothed_pred = uniform_filter(y_test_pred.astype(float), size=5)
             # Convert back to 0/1
             y_test_pred_processed = (smoothed_pred > 0.5).astype(int)
-            metrics_test=evaluate_model(y_test,y_test_pred_processed)
+
+            # Get probabilities
+            y_test_proba = model.predict_proba(X_test)[:, 1]
+
+            # Smooth probabilities
+            smoothed_proba = uniform_filter(y_test_proba.astype(float), size=5)
+
+            metrics_test=evaluate_model(y_test,y_test_pred_processed,smoothed_proba)
             print("----------------------------------------")
 
  
@@ -653,20 +675,25 @@ def run_model(feature_image_path,gt_image_path, feature_column_names,model_name,
         'f1_train': round(metrics_train['f1_score'],4),
         'precision_train': round(metrics_train['precision'],4),
         'recall_train': round(metrics_train['recall'],4),
+        'roc_auc_train': round(metrics_train['roc_auc'],4),
+
         'f1_train_binary': round(metrics_train['f1_score_binary'],4),
         'precision_train_binary': round(metrics_train['precision_binary'],4),
         'recall_train_binary': round(metrics_train['recall_binary'],4),
-        'roc_auc_train': round(metrics_train['roc_auc'],4),
+        'roc_auc_train_binary': round(metrics_train['roc_auc_binary'],4),
         'log_loss_test': round(metrics_test['log_loss'],4), 
 
         'acc_test': round(metrics_test['accuracy'],4),
         'f1_test': round(metrics_test['f1_score'],4),
         'precision_test': round(metrics_test['precision'],4),
         'recall_test': round(metrics_test['recall'],4),
+        'roc_auc_test': round(metrics_test['roc_auc'],4),
+
         'f1_test_binary': round(metrics_test['f1_score_binary'],4),
         'precision_test_binary': round(metrics_test['precision_binary'],4),
         'recall_test_binary': round(metrics_test['recall_binary'],4),
-        'roc_auc_test': round(metrics_test['roc_auc'],4),
+        'roc_auc_test_binary': round(metrics_test['roc_auc_binary'],4),
+
         'cm_train': metrics_train['confusion_matrix'],
         'cm_test': metrics_test['confusion_matrix'],
         }

@@ -1081,7 +1081,7 @@ def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,til
                 random_state=42,
                 n_jobs=default_n_jobs,
                 tree_method="hist",
-                early_stopping_rounds=10,
+                early_stopping_rounds=20,
                 verbosity=0,
                 **params
             )
@@ -1125,6 +1125,7 @@ def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,til
         })
 
         return round(val_mean, 5)
+    
     print("Using 10 n-trials for optuna parameter tuning")
     if model=="RandomForest":
         start_time = time.perf_counter()
@@ -1146,5 +1147,10 @@ def run_optuna_param_tuning(model,feature_image_path,gt_image_path,train_ids,til
         print(f"XGBoost parameter tuning using optuna completed in {(end_time-start_time)/60:.2f} minutes")
         print("Best Score:", xgb_study.best_value)
         print("Best Params:", xgb_study.best_params)
+
+        best_trial = max(trial_results, key=lambda x: x["val_f1_score_mean"])
+        best_iteration = best_trial["best_iteration"]
+        print("Best iteration:", best_iteration)
+        xgb_study.best_params["n_estimators"] = best_iteration
         return xgb_study.best_params
 

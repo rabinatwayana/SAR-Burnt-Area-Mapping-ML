@@ -47,8 +47,8 @@ def evaluate_model(y_true, y_pred,y_proba):
     metrics = {
         "log_loss": log_loss(y_true, y_pred),
         'accuracy': accuracy_score(y_true, y_pred),
-        'f1_score': f1_score(y_true, y_pred, average="macro"),
-        'precision': precision_score(y_true, y_pred, average="macro", zero_division=0),
+        'f1_score': f1_score(y_true, y_pred, average="o"),
+        'precision': precision_score(y_true, y_pred, average="o", zero_division=0),
         'recall': recall_score(y_true, y_pred, average="macro"),
         'roc_auc': roc_auc_score(y_true, y_proba, multi_class="ovr", average="macro"),
 
@@ -852,6 +852,13 @@ def compute_pca(input_image, output_path,n_components=3):
 
     pca = PCA(n_components=n_components)  # Get the first 5 principal components
     principal_components = pca.fit_transform(pixels)  # Shape will be (num_pixels, 5)
+
+    explained_variance = pca.explained_variance_ratio_
+    for i, var in enumerate(explained_variance, 1):
+        print(f"Principal Component {i} explains {var*100:.2f}% of variance")
+    total_variance = np.sum(explained_variance)
+    print(f"Total variance explained by {n_components} components: {total_variance*100:.2f}%")
+
 
     num_components = pca.n_components_
     print(f'Number of principal components selected: {num_components}')

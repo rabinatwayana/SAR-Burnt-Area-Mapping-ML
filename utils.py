@@ -27,7 +27,7 @@ import time
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, cross_validate, train_test_split, StratifiedShuffleSplit
 from sklearn.metrics import f1_score, make_scorer
-
+from matplotlib.ticker import ScalarFormatter
 default_n_jobs=7
 
 def evaluate_model(y_true, y_pred,y_proba):
@@ -226,11 +226,23 @@ def generate_gt(dnbr_file_path, output_gt_path):
         # Flatten the data to 1D array for histogram calculation
         dNBR_flat = dNBR_data.flatten()
 
-        # Plot histogram of dNBR values
-        plt.hist(dNBR_flat, bins=50, range=(dNBR_flat.min(), dNBR_flat.max()), alpha=0.75, color='blue')
+        plt.hist(dNBR_flat, bins=50, alpha=0.75, color='blue')
+
         plt.title("Histogram of dNBR Values")
         plt.xlabel("dNBR values")
         plt.ylabel("Frequency")
+
+        # enforce scientific notation (×10^n style)
+        plt.rcParams['axes.formatter.use_mathtext'] = True
+
+        ax = plt.gca()
+        formatter = ScalarFormatter(useMathText=True)
+        formatter.set_scientific(True)
+        formatter.set_powerlimits((0, 0))  # always scientific
+
+        ax.xaxis.set_major_formatter(formatter)
+        ax.yaxis.set_major_formatter(formatter)
+
         plt.show()
 
         # Apply Otsu's thresholding method to find the optimal threshold
